@@ -17,8 +17,8 @@ export const PeerSchema = z.object({
   name: z.string().optional(),
   project: z.string().optional(),
   description: z.string().optional(),
-  registeredAt: z.string().datetime(),
-  lastSeenAt: z.string().datetime(),
+  registeredAt: z.iso.datetime(),
+  lastSeenAt: z.iso.datetime(),
 });
 export type Peer = z.infer<typeof PeerSchema>;
 
@@ -37,7 +37,7 @@ export const MessageSchema = z.object({
   type: z.enum(messageTypes),
   content: z.string(),
   replyTo: MessageIdSchema.optional(),
-  createdAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
   status: z.enum(messageStatuses),
 });
 export type Message = z.infer<typeof MessageSchema>;
@@ -46,7 +46,7 @@ export const RoomMetaSchema = z.object({
   id: RoomIdSchema,
   description: z.string().optional(),
   createdBy: PeerIdSchema,
-  createdAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
 });
 export type RoomMeta = z.infer<typeof RoomMetaSchema>;
 
@@ -54,6 +54,6 @@ export const RoomMessageSchema = z.object({
   id: MessageIdSchema,
   from: PeerIdSchema,
   content: z.string(),
-  createdAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
 });
 export type RoomMessage = z.infer<typeof RoomMessageSchema>;
