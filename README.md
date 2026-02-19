@@ -1,15 +1,59 @@
 # agent-bridge
 
-To install dependencies:
+A filesystem-based MCP server that enables peer-to-peer communication between Claude Code sessions across repositories.
+
+Each Claude Code session runs its own stdio MCP server instance. All instances read/write to a shared directory (`~/.agent-bridge/`). No central process — the filesystem is the message bus.
+
+## Setup
 
 ```bash
 bun install
+bun run build
 ```
 
-To run:
+## Usage
+
+Register the MCP server in each Claude Code session with a unique `--peer-id`:
 
 ```bash
-bun run index.ts
+# Frontend session
+claude mcp add agent-bridge -- node /path/to/agent-bridge/dist/index.js \
+  --peer-id frontend --name "Frontend"
+
+# Backend session
+claude mcp add agent-bridge -- node /path/to/agent-bridge/dist/index.js \
+  --peer-id backend --name "Backend API"
 ```
 
-This project was created using `bun init` in bun v1.3.9. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+### CLI Arguments
+
+| Argument | Required | Description |
+|---|---|---|
+| `--peer-id` | Yes | Unique identifier for this peer |
+| `--name` | No | Display name (defaults to peer-id) |
+| `--project` | No | Project path (defaults to cwd) |
+| `--bridge-dir` | No | Shared directory (defaults to `~/.agent-bridge`) |
+
+## Tools
+
+| Tool | Description |
+|---|---|
+| `register` | Update peer registration info |
+| `list_peers` | List other registered peers |
+| `send_message` | Send a direct message (or broadcast with `to="all"`) |
+| `check_inbox` | Check for new messages |
+| `reply` | Reply to a message |
+| `create_room` | Create a shared room |
+| `list_rooms` | List available rooms |
+| `send_room_message` | Send a message to a room |
+| `read_room_messages` | Read room messages |
+| `post_context` | Post a context document to a room |
+| `read_context` | Read a context document |
+| `list_context` | List context keys in a room |
+
+## Development
+
+```bash
+bun test          # Run tests
+bun run build     # Build for Node.js
+```
