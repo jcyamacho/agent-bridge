@@ -1,6 +1,6 @@
 {
   "name": "@jcyamacho/agent-bridge",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "main": "dist/index.js",
   "bin": {
     "agent-bridge": "dist/index.js"
@@ -12,7 +12,7 @@
     "provenance": true
   },
   "scripts": {
-    "build": "bun build src/index.ts --target=node --outfile dist/index.js",
+    "build": "bun build src/index.ts --target=node --outfile dist/index.js --banner \"#!/usr/bin/env node\"",
     "start": "node dist/index.js",
     "lint": "biome check --write"
   },
