@@ -1,11 +1,11 @@
 {
   "name": "agent-bridge",
-  "module": "index.ts",
+  "module": "src/index.ts",
   "main": "dist/index.js",
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "bun build index.ts --target=node --outfile dist/index.js",
+    "build": "bun build src/index.ts --target=node --outfile dist/index.js",
     "start": "node dist/index.js"
   },
   "devDependencies": {
