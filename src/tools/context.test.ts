@@ -1,18 +1,22 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { postContext, readContext, listContext } from "./context";
-import { createRoom } from "./rooms";
-import { BridgePaths } from "../fs/paths";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
+import { FSContextStore } from "../store/fs-context-store";
+import { FSRoomStore } from "../store/fs-room-store";
+import { listContext, postContext, readContext } from "./context";
+import { createRoom } from "./rooms";
 
 let tmpDir: string;
-let paths: BridgePaths;
+let contextStore: FSContextStore;
+let roomStore: FSRoomStore;
+const roomId = "feature";
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ab-test-"));
-  paths = new BridgePaths(tmpDir);
-  await createRoom(paths, { name: "feature", createdBy: "frontend" });
+  contextStore = new FSContextStore(tmpDir);
+  roomStore = new FSRoomStore(tmpDir);
+  await createRoom(roomStore, { roomId, createdBy: "frontend" });
 });
 
 afterEach(async () => {
@@ -21,27 +25,50 @@ afterEach(async () => {
 
 describe("postContext + readContext", () => {
   test("writes and reads context markdown", async () => {
-    await postContext(paths, { room: "feature", key: "user-schema", content: "# User\n- id: string" });
-    const content = await readContext(paths, { room: "feature", key: "user-schema" });
+    await postContext(contextStore, {
+      roomId,
+      key: "user-schema",
+      content: "# User\n- id: string",
+    });
+    const content = await readContext(contextStore, {
+      roomId,
+      key: "user-schema",
+    });
     expect(content).toBe("# User\n- id: string");
   });
 
   test("overwrites existing context", async () => {
-    await postContext(paths, { room: "feature", key: "api", content: "v1" });
-    await postContext(paths, { room: "feature", key: "api", content: "v2" });
-    expect(await readContext(paths, { room: "feature", key: "api" })).toBe("v2");
+    await postContext(contextStore, {
+      roomId,
+      key: "api",
+      content: "v1",
+    });
+    await postContext(contextStore, {
+      roomId,
+      key: "api",
+      content: "v2",
+    });
+    expect(await readContext(contextStore, { roomId, key: "api" })).toBe("v2");
   });
 });
 
 describe("listContext", () => {
   test("lists all context keys", async () => {
-    await postContext(paths, { room: "feature", key: "schema", content: "..." });
-    await postContext(paths, { room: "feature", key: "auth", content: "..." });
-    const keys = await listContext(paths, { room: "feature" });
+    await postContext(contextStore, {
+      roomId,
+      key: "schema",
+      content: "...",
+    });
+    await postContext(contextStore, {
+      roomId,
+      key: "auth",
+      content: "...",
+    });
+    const keys = await listContext(contextStore, { roomId });
     expect(keys.sort()).toEqual(["auth", "schema"]);
   });
 
   test("returns empty when no context", async () => {
-    expect(await listContext(paths, { room: "feature" })).toEqual([]);
+    expect(await listContext(contextStore, { roomId })).toEqual([]);
   });
 });

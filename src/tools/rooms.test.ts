@@ -1,16 +1,25 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { createRoom, listRooms, sendRoomMessage, readRoomMessages } from "./rooms";
-import { BridgePaths } from "../fs/paths";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
+import { FSRoomStore } from "../store/fs-room-store";
+import {
+  createRoom,
+  listRooms,
+  readRoomMessages,
+  sendRoomMessage,
+} from "./rooms";
 
 let tmpDir: string;
-let paths: BridgePaths;
+let roomStore: FSRoomStore;
+const frontendPeerId = "frontend";
+const backendPeerId = "backend";
+const featureRoomId = "feature-x";
+const chatRoomId = "chat";
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ab-test-"));
-  paths = new BridgePaths(tmpDir);
+  roomStore = new FSRoomStore(tmpDir);
 });
 
 afterEach(async () => {
@@ -19,45 +28,81 @@ afterEach(async () => {
 
 describe("createRoom", () => {
   test("creates room directory and meta", async () => {
-    await createRoom(paths, { name: "feature-x", createdBy: "frontend", description: "Coordination" });
-    const meta = JSON.parse(await fs.readFile(paths.roomMetaFile("feature-x"), "utf-8"));
-    expect(meta.name).toBe("feature-x");
-    expect(meta.createdBy).toBe("frontend");
+    await createRoom(roomStore, {
+      roomId: featureRoomId,
+      createdBy: frontendPeerId,
+      description: "Coordination",
+    });
+    const meta = JSON.parse(
+      await fs.readFile(
+        path.join(tmpDir, "rooms", featureRoomId, "meta.json"),
+        "utf-8",
+      ),
+    );
+    expect(meta.id).toBe(featureRoomId);
+    expect(meta.createdBy).toBe(frontendPeerId);
   });
 });
 
 describe("listRooms", () => {
   test("returns all rooms", async () => {
-    await createRoom(paths, { name: "room-a", createdBy: "frontend" });
-    await createRoom(paths, { name: "room-b", createdBy: "backend" });
-    const rooms = await listRooms(paths);
+    await createRoom(roomStore, {
+      roomId: "room-a",
+      createdBy: frontendPeerId,
+    });
+    await createRoom(roomStore, {
+      roomId: "room-b",
+      createdBy: backendPeerId,
+    });
+    const rooms = await listRooms(roomStore);
     expect(rooms).toHaveLength(2);
   });
 
   test("returns empty when no rooms", async () => {
-    expect(await listRooms(paths)).toEqual([]);
+    expect(await listRooms(roomStore)).toEqual([]);
   });
 });
 
 describe("sendRoomMessage + readRoomMessages", () => {
   test("appends and reads messages", async () => {
-    await createRoom(paths, { name: "chat", createdBy: "frontend" });
-    await sendRoomMessage(paths, { room: "chat", from: "frontend", content: "hello" });
-    await sendRoomMessage(paths, { room: "chat", from: "backend", content: "hi back" });
+    await createRoom(roomStore, {
+      roomId: chatRoomId,
+      createdBy: frontendPeerId,
+    });
+    await sendRoomMessage(roomStore, {
+      roomId: chatRoomId,
+      from: frontendPeerId,
+      content: "hello",
+    });
+    await sendRoomMessage(roomStore, {
+      roomId: chatRoomId,
+      from: backendPeerId,
+      content: "hi back",
+    });
 
-    const msgs = await readRoomMessages(paths, { room: "chat" });
+    const msgs = await readRoomMessages(roomStore, { roomId: chatRoomId });
     expect(msgs).toHaveLength(2);
-    expect(msgs[0]!.content).toBe("hello");
-    expect(msgs[1]!.content).toBe("hi back");
+    expect(msgs[0]?.content).toBe("hello");
+    expect(msgs[1]?.content).toBe("hi back");
   });
 
   test("last_n limits results", async () => {
-    await createRoom(paths, { name: "chat", createdBy: "frontend" });
+    await createRoom(roomStore, {
+      roomId: chatRoomId,
+      createdBy: frontendPeerId,
+    });
     for (let i = 0; i < 5; i++) {
-      await sendRoomMessage(paths, { room: "chat", from: "frontend", content: `msg ${i}` });
+      await sendRoomMessage(roomStore, {
+        roomId: chatRoomId,
+        from: frontendPeerId,
+        content: `msg ${i}`,
+      });
     }
-    const msgs = await readRoomMessages(paths, { room: "chat", lastN: 2 });
+    const msgs = await readRoomMessages(roomStore, {
+      roomId: chatRoomId,
+      lastN: 2,
+    });
     expect(msgs).toHaveLength(2);
-    expect(msgs[0]!.content).toBe("msg 3");
+    expect(msgs[0]?.content).toBe("msg 3");
   });
 });

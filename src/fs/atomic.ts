@@ -1,8 +1,11 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import crypto from "node:crypto";
 
-export async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
+export async function atomicWriteJson(
+  filePath: string,
+  data: unknown,
+): Promise<void> {
   const dir = path.dirname(filePath);
   await fs.mkdir(dir, { recursive: true });
   const tmp = path.join(dir, `.tmp_${crypto.randomBytes(4).toString("hex")}`);
@@ -10,7 +13,9 @@ export async function atomicWriteJson(filePath: string, data: unknown): Promise<
   await fs.rename(tmp, filePath);
 }
 
-export async function readJson<T = unknown>(filePath: string): Promise<T | undefined> {
+export async function readJson<T = unknown>(
+  filePath: string,
+): Promise<T | undefined> {
   try {
     const content = await fs.readFile(filePath, "utf-8");
     return JSON.parse(content) as T;

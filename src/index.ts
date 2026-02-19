@@ -3,14 +3,25 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { parseArgs } from "./config";
-import { BridgePaths } from "./fs/paths";
-import { registerPeer, listPeers } from "./tools/peers";
-import { sendMessage, checkInbox, reply } from "./tools/messaging";
-import { createRoom, listRooms, sendRoomMessage, readRoomMessages } from "./tools/rooms";
-import { postContext, readContext, listContext } from "./tools/context";
+import { FSContextStore } from "./store/fs-context-store";
+import { FSMessageStore } from "./store/fs-message-store";
+import { FSPeerStore } from "./store/fs-peer-store";
+import { FSRoomStore } from "./store/fs-room-store";
+import { listContext, postContext, readContext } from "./tools/context";
+import { checkInbox, reply, sendMessage } from "./tools/messaging";
+import { listPeers, registerPeer } from "./tools/peers";
+import {
+  createRoom,
+  listRooms,
+  readRoomMessages,
+  sendRoomMessage,
+} from "./tools/rooms";
 
 const config = parseArgs(process.argv.slice(2));
-const paths = new BridgePaths(config.bridgeDir);
+const peerStore = new FSPeerStore(config.bridgeDir);
+const messageStore = new FSMessageStore(config.bridgeDir);
+const roomStore = new FSRoomStore(config.bridgeDir);
+const contextStore = new FSContextStore(config.bridgeDir);
 
 const server = new McpServer({
   name: "agent-bridge",
@@ -18,7 +29,7 @@ const server = new McpServer({
 });
 
 async function heartbeat() {
-  await registerPeer(paths, {
+  await registerPeer(peerStore, {
     peerId: config.peerId,
     name: config.name,
     project: config.project,
@@ -35,7 +46,7 @@ server.registerTool(
     }),
   },
   async ({ name, description }) => {
-    const peer = await registerPeer(paths, {
+    const peer = await registerPeer(peerStore, {
       peerId: config.peerId,
       name: name ?? config.name,
       description,
@@ -52,7 +63,7 @@ server.registerTool(
   },
   async () => {
     await heartbeat();
-    const peers = await listPeers(paths, config.peerId);
+    const peers = await listPeers(peerStore, config.peerId);
     return { content: [{ type: "text", text: JSON.stringify(peers) }] };
   },
 );
@@ -64,12 +75,14 @@ server.registerTool(
     inputSchema: z.object({
       to: z.string(),
       content: z.string(),
-      type: z.enum(["question", "reply", "announcement", "context_share"]).optional(),
+      type: z
+        .enum(["question", "reply", "announcement", "context_share"])
+        .optional(),
     }),
   },
   async ({ to, content, type }) => {
     await heartbeat();
-    const msg = await sendMessage(paths, {
+    const msg = await sendMessage(messageStore, peerStore, {
       from: config.peerId,
       to,
       content,
@@ -89,9 +102,11 @@ server.registerTool(
   },
   async ({ include_read }) => {
     await heartbeat();
-    let messages = await checkInbox(paths, config.peerId);
+    let messages = await checkInbox(messageStore, config.peerId);
     if (!include_read) {
-      messages = messages.filter((m) => m.status === "unread" || m.status === "read");
+      messages = messages.filter(
+        (m) => m.status === "unread" || m.status === "read",
+      );
     }
     return { content: [{ type: "text", text: JSON.stringify(messages) }] };
   },
@@ -108,7 +123,7 @@ server.registerTool(
   },
   async ({ message_id, content }) => {
     await heartbeat();
-    const msg = await reply(paths, {
+    const msg = await reply(messageStore, {
       from: config.peerId,
       messageId: message_id,
       content,
@@ -120,16 +135,17 @@ server.registerTool(
 server.registerTool(
   "create_room",
   {
-    description: "Create a shared room for group discussion and context sharing",
+    description:
+      "Create a shared room for group discussion and context sharing",
     inputSchema: z.object({
-      name: z.string(),
+      room_id: z.string(),
       description: z.string().optional(),
     }),
   },
-  async ({ name, description }) => {
+  async ({ room_id, description }) => {
     await heartbeat();
-    const room = await createRoom(paths, {
-      name,
+    const room = await createRoom(roomStore, {
+      roomId: room_id,
       createdBy: config.peerId,
       description,
     });
@@ -145,7 +161,7 @@ server.registerTool(
   },
   async () => {
     await heartbeat();
-    const rooms = await listRooms(paths);
+    const rooms = await listRooms(roomStore);
     return { content: [{ type: "text", text: JSON.stringify(rooms) }] };
   },
 );
@@ -155,14 +171,14 @@ server.registerTool(
   {
     description: "Send a message to a room",
     inputSchema: z.object({
-      room: z.string(),
+      room_id: z.string(),
       content: z.string(),
     }),
   },
-  async ({ room, content }) => {
+  async ({ room_id, content }) => {
     await heartbeat();
-    const msg = await sendRoomMessage(paths, {
-      room,
+    const msg = await sendRoomMessage(roomStore, {
+      roomId: room_id,
       from: config.peerId,
       content,
     });
@@ -175,15 +191,15 @@ server.registerTool(
   {
     description: "Read messages from a room",
     inputSchema: z.object({
-      room: z.string(),
+      room_id: z.string(),
       since: z.string().optional(),
       last_n: z.number().optional(),
     }),
   },
-  async ({ room, since, last_n }) => {
+  async ({ room_id, since, last_n }) => {
     await heartbeat();
-    const messages = await readRoomMessages(paths, {
-      room,
+    const messages = await readRoomMessages(roomStore, {
+      roomId: room_id,
       since,
       lastN: last_n,
     });
@@ -196,15 +212,22 @@ server.registerTool(
   {
     description: "Post a context document to a room's shared board",
     inputSchema: z.object({
-      room: z.string(),
+      room_id: z.string(),
       key: z.string(),
       content: z.string(),
     }),
   },
-  async ({ room, key, content }) => {
+  async ({ room_id, key, content }) => {
     await heartbeat();
-    await postContext(paths, { room, key, content });
-    return { content: [{ type: "text", text: JSON.stringify({ ok: true, room, key }) }] };
+    await postContext(contextStore, { roomId: room_id, key, content });
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({ ok: true, roomId: room_id, key }),
+        },
+      ],
+    };
   },
 );
 
@@ -213,13 +236,13 @@ server.registerTool(
   {
     description: "Read a context document from a room's shared board",
     inputSchema: z.object({
-      room: z.string(),
+      room_id: z.string(),
       key: z.string(),
     }),
   },
-  async ({ room, key }) => {
+  async ({ room_id, key }) => {
     await heartbeat();
-    const content = await readContext(paths, { room, key });
+    const content = await readContext(contextStore, { roomId: room_id, key });
     return { content: [{ type: "text", text: content }] };
   },
 );
@@ -229,12 +252,12 @@ server.registerTool(
   {
     description: "List all context keys in a room",
     inputSchema: z.object({
-      room: z.string(),
+      room_id: z.string(),
     }),
   },
-  async ({ room }) => {
+  async ({ room_id }) => {
     await heartbeat();
-    const keys = await listContext(paths, { room });
+    const keys = await listContext(contextStore, { roomId: room_id });
     return { content: [{ type: "text", text: JSON.stringify(keys) }] };
   },
 );

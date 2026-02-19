@@ -1,8 +1,8 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { atomicWriteJson, readJson } from "./atomic";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
+import { atomicWriteJson, readJson } from "./atomic";
 
 let tmpDir: string;
 

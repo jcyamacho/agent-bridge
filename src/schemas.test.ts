@@ -1,5 +1,10 @@
-import { test, expect, describe } from "bun:test";
-import { PeerSchema, MessageSchema, RoomMetaSchema, RoomMessageSchema } from "./schemas";
+import { describe, expect, test } from "bun:test";
+import {
+  MessageSchema,
+  PeerSchema,
+  RoomMessageSchema,
+  RoomMetaSchema,
+} from "./schemas";
 
 describe("PeerSchema", () => {
   test("validates a valid peer", () => {
@@ -56,7 +61,7 @@ describe("MessageSchema", () => {
 describe("RoomMetaSchema", () => {
   test("validates room metadata", () => {
     const result = RoomMetaSchema.safeParse({
-      name: "feature-x",
+      id: "feature-x",
       createdBy: "frontend",
       createdAt: "2026-02-19T10:30:00.000Z",
     });

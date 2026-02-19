@@ -1,8 +1,9 @@
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
+import { type PeerId, PeerIdSchema } from "./schemas";
 
 export interface BridgeConfig {
-  peerId: string;
+  peerId: PeerId;
   name: string;
   project: string;
   bridgeDir: string;
@@ -14,8 +15,9 @@ export function parseArgs(argv: string[]): BridgeConfig {
     return idx !== -1 ? argv[idx + 1] : undefined;
   };
 
-  const peerId = get("--peer-id");
-  if (!peerId) throw new Error("--peer-id is required");
+  const rawPeerId = get("--peer-id");
+  if (!rawPeerId) throw new Error("--peer-id is required");
+  const peerId = PeerIdSchema.parse(rawPeerId);
 
   return {
     peerId,
