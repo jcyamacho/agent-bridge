@@ -1,10 +1,10 @@
 # agent-bridge
 
 A filesystem-based MCP server that enables peer-to-peer communication
-between Claude Code sessions across repositories.
+between local AI agents across repositories.
 
-Each Claude Code session runs its own stdio MCP server instance. All
-instances read/write to a shared directory (`~/.agent-bridge/`). No
+Each local MCP client session runs its own stdio MCP server instance.
+All instances read/write to a shared directory (`~/.agent-bridge/`). No
 central process - the filesystem is the message bus.
 
 ## Setup
@@ -16,7 +16,12 @@ bun run build
 
 ## Usage
 
-Register the MCP server in each Claude Code session with a unique `--peer-id`:
+Register the MCP server in each local agent session with a unique
+`--peer-id`.
+
+The examples below use Claude Code CLI, but the same server works with
+other local MCP-capable agents (for example, Codex) using their MCP
+server registration flow.
 
 ```bash
 # Frontend session
