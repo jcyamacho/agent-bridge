@@ -6,7 +6,8 @@
   "private": true,
   "scripts": {
     "build": "bun build src/index.ts --target=node --outfile dist/index.js",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "lint": "biome check --write"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.3",
