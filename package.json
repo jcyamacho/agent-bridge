@@ -1,9 +1,12 @@
 {
-  "name": "agent-bridge",
+  "name": "@jcyamacho/agent-bridge",
   "module": "src/index.ts",
   "main": "dist/index.js",
+  "bin": {
+    "agent-bridge": "dist/index.js"
+  },
   "type": "module",
-  "private": true,
+  "private": false,
   "scripts": {
     "build": "bun build src/index.ts --target=node --outfile dist/index.js",
     "start": "node dist/index.js",
@@ -15,6 +18,14 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
