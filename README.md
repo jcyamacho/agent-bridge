@@ -7,7 +7,7 @@ Each local MCP client session runs its own stdio MCP server instance.
 All instances read/write to a shared directory (`~/.agent-bridge/`). No
 central process - the filesystem is the message bus.
 
-## Setup
+## Development Setup
 
 ```bash
 bun install
@@ -25,11 +25,11 @@ server registration flow.
 
 ```bash
 # Frontend session
-claude mcp add agent-bridge -- node /path/to/agent-bridge/dist/index.js \
+claude mcp add agent-bridge -- npx -y @jcyamacho/agent-bridge \
   --peer-id frontend --name "Frontend"
 
 # Backend session
-claude mcp add agent-bridge -- node /path/to/agent-bridge/dist/index.js \
+claude mcp add agent-bridge -- npx -y @jcyamacho/agent-bridge \
   --peer-id backend --name "Backend API"
 ```
 
