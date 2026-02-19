@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { parseArgs as parseNodeArgs } from "node:util";
 import { type PeerId, PeerIdSchema } from "./schemas";
 
 export interface BridgeConfig {
@@ -10,19 +11,26 @@ export interface BridgeConfig {
 }
 
 export function parseArgs(argv: string[]): BridgeConfig {
-  const get = (flag: string): string | undefined => {
-    const idx = argv.indexOf(flag);
-    return idx !== -1 ? argv[idx + 1] : undefined;
-  };
+  const { values } = parseNodeArgs({
+    args: argv,
+    options: {
+      "peer-id": { type: "string" },
+      name: { type: "string" },
+      project: { type: "string" },
+      "bridge-dir": { type: "string" },
+    },
+    strict: true,
+    allowPositionals: false,
+  });
 
-  const rawPeerId = get("--peer-id");
+  const rawPeerId = values["peer-id"];
   if (!rawPeerId) throw new Error("--peer-id is required");
   const peerId = PeerIdSchema.parse(rawPeerId);
 
   return {
     peerId,
-    name: get("--name") ?? peerId,
-    project: get("--project") ?? process.cwd(),
-    bridgeDir: get("--bridge-dir") ?? path.join(os.homedir(), ".agent-bridge"),
+    name: values.name ?? peerId,
+    project: values.project ?? process.cwd(),
+    bridgeDir: values["bridge-dir"] ?? path.join(os.homedir(), ".agent-bridge"),
   };
 }
