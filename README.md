@@ -1,8 +1,11 @@
 # agent-bridge
 
-A filesystem-based MCP server that enables peer-to-peer communication between Claude Code sessions across repositories.
+A filesystem-based MCP server that enables peer-to-peer communication
+between Claude Code sessions across repositories.
 
-Each Claude Code session runs its own stdio MCP server instance. All instances read/write to a shared directory (`~/.agent-bridge/`). No central process — the filesystem is the message bus.
+Each Claude Code session runs its own stdio MCP server instance. All
+instances read/write to a shared directory (`~/.agent-bridge/`). No
+central process - the filesystem is the message bus.
 
 ## Setup
 
@@ -28,7 +31,7 @@ claude mcp add agent-bridge -- node /path/to/agent-bridge/dist/index.js \
 ### CLI Arguments
 
 | Argument | Required | Description |
-|---|---|---|
+| --- | --- | --- |
 | `--peer-id` | Yes | Unique identifier for this peer |
 | `--name` | No | Display name (defaults to peer-id) |
 | `--project` | No | Project path (defaults to cwd) |
@@ -37,7 +40,7 @@ claude mcp add agent-bridge -- node /path/to/agent-bridge/dist/index.js \
 ## Tools
 
 | Tool | Description |
-|---|---|
+| --- | --- |
 | `register` | Update peer registration info |
 | `list_peers` | List other registered peers |
 | `send_message` | Send a direct message (or broadcast with `to="all"`) |
@@ -50,6 +53,9 @@ claude mcp add agent-bridge -- node /path/to/agent-bridge/dist/index.js \
 | `post_context` | Post a context document to a room |
 | `read_context` | Read a context document |
 | `list_context` | List context keys in a room |
+
+Room-related tools use `room_id` as the stable room identifier in
+their input payloads.
 
 ## Development
 
