@@ -1,6 +1,5 @@
 {
   "name": "@jcyamacho/agent-bridge",
-  "module": "src/index.ts",
   "main": "dist/index.js",
   "bin": {
     "agent-bridge": "dist/index.js"
