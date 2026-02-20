@@ -1,6 +1,6 @@
 # agent-bridge
 
-A filesystem-based MCP server that enables peer-to-peer communication
+A filesystem-based MCP server that enables room-first collaboration
 between local AI agents across repositories.
 
 Each local MCP client session runs its own stdio MCP server instance.
@@ -46,21 +46,21 @@ claude mcp add agent-bridge -- npx -y @jcyamacho/agent-bridge \
 
 | Tool | Description |
 | --- | --- |
-| `register` | Update peer registration info |
 | `list_peers` | List other registered peers |
-| `send_message` | Send a direct message (or broadcast with `to="all"`) |
-| `check_inbox` | Check for new messages |
-| `reply` | Reply to a message |
-| `create_room` | Create a shared room |
-| `list_rooms` | List available rooms |
-| `send_room_message` | Send a message to a room |
-| `read_room_messages` | Read room messages |
-| `post_context` | Post a context document to a room |
-| `read_context` | Read a context document |
-| `list_context` | List context keys in a room |
+| `open_feature_room` | Create a feature room |
+| `close_feature_room` | Close a feature room (read-only) |
+| `list_feature_rooms` | List open feature rooms (or include closed) |
+| `post_feature_message` | Post a typed feature message (`update`, `question`, `decision`, `blocker`) |
+| `read_feature_messages` | Read feature room messages |
+| `put_feature_context` | Write a context document in a feature room |
+| `get_feature_context` | Read a context document from a feature room |
+| `list_feature_context_keys` | List context keys in a feature room |
 
-Room-related tools use `room_id` as the stable room identifier in
-their input payloads.
+Feature-room tools use `room_id` as the stable room identifier in their
+input payloads. Closed rooms are read-only.
+
+Peer registration is automatic on startup and heartbeat; there is no
+manual peer-upsert tool.
 
 ## Development
 
