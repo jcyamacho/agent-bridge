@@ -29,6 +29,15 @@ describe("atomicWriteJson", () => {
     const content = JSON.parse(await fs.readFile(filePath, "utf-8"));
     expect(content).toEqual({ v: 2 });
   });
+
+  test("creates parent directories when missing", async () => {
+    const filePath = path.join(tmpDir, "nested", "dir", "test.json");
+
+    await atomicWriteJson(filePath, { ok: true });
+
+    const content = JSON.parse(await fs.readFile(filePath, "utf-8"));
+    expect(content).toEqual({ ok: true });
+  });
 });
 
 describe("readJson", () => {
@@ -42,5 +51,19 @@ describe("readJson", () => {
   test("returns undefined for missing file", async () => {
     const result = await readJson(path.join(tmpDir, "nope.json"));
     expect(result).toBeUndefined();
+  });
+
+  test("throws for invalid json", async () => {
+    const filePath = path.join(tmpDir, "invalid.json");
+    await fs.writeFile(filePath, "{not-valid-json}");
+
+    let threw = false;
+    try {
+      await readJson(filePath);
+    } catch {
+      threw = true;
+    }
+
+    expect(threw).toBe(true);
   });
 });
