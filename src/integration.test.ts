@@ -3,27 +3,33 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FSContextStore } from "./store/fs-context-store";
-import { FSMessageStore } from "./store/fs-message-store";
 import { FSPeerStore } from "./store/fs-peer-store";
 import { FSRoomStore } from "./store/fs-room-store";
-import { listContext, postContext, readContext } from "./tools/context";
-import { checkInbox, reply, sendMessage } from "./tools/messaging";
-import { listPeers, registerPeer } from "./tools/peers";
-import { createRoom, readRoomMessages, sendRoomMessage } from "./tools/rooms";
+import {
+  getFeatureContext,
+  listFeatureContextKeys,
+  putFeatureContext,
+} from "./tools/context";
+import { listPeers, upsertPeer } from "./tools/peers";
+import {
+  closeFeatureRoom,
+  openFeatureRoom,
+  postFeatureMessage,
+  readFeatureMessages,
+} from "./tools/rooms";
 
 let tmpDir: string;
 let peerStore: FSPeerStore;
-let messageStore: FSMessageStore;
 let roomStore: FSRoomStore;
 let contextStore: FSContextStore;
-const frontendPeerId = "frontend";
+const webPeerId = "web";
 const backendPeerId = "backend";
-const userFeatureRoomId = "user-feature";
+const mobilePeerId = "mobile";
+const userFeatureRoomId = "feature-user-profile";
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ab-integration-"));
   peerStore = new FSPeerStore(tmpDir);
-  messageStore = new FSMessageStore(tmpDir);
   roomStore = new FSRoomStore(tmpDir);
   contextStore = new FSContextStore(tmpDir);
 });
@@ -32,79 +38,104 @@ afterEach(async () => {
   await fs.rm(tmpDir, { recursive: true });
 });
 
-describe("full workflow: question -> answer", () => {
-  test("frontend asks backend, backend replies", async () => {
-    await registerPeer(peerStore, { peerId: frontendPeerId, name: "Frontend" });
-    await registerPeer(peerStore, {
-      peerId: backendPeerId,
-      name: "Backend API",
-    });
+describe("full workflow: feature room collaboration", () => {
+  test("backend, web, and mobile coordinate through one room", async () => {
+    await upsertPeer(peerStore, { peerId: webPeerId, name: "Web App" });
+    await upsertPeer(peerStore, { peerId: backendPeerId, name: "Backend API" });
+    await upsertPeer(peerStore, { peerId: mobilePeerId, name: "Mobile App" });
 
-    const peers = await listPeers(peerStore, frontendPeerId);
-    expect(peers).toHaveLength(1);
-    expect(String(peers[0]?.id)).toBe(backendPeerId);
+    const webPeers = await listPeers(peerStore, webPeerId);
+    expect(webPeers).toHaveLength(2);
 
-    const question = await sendMessage(messageStore, peerStore, {
-      from: frontendPeerId,
-      to: backendPeerId,
-      content: "What does GET /users/:id return?",
-      type: "question",
-    });
-
-    const backendInbox = await checkInbox(messageStore, backendPeerId);
-    expect(backendInbox).toHaveLength(1);
-    expect(backendInbox[0]?.content).toContain("GET /users/:id");
-
-    await reply(messageStore, {
-      from: backendPeerId,
-      messageId: question.id,
-      content: "Returns { id, name, email }",
-    });
-
-    const frontendInbox = await checkInbox(messageStore, frontendPeerId);
-    expect(frontendInbox).toHaveLength(1);
-    expect(frontendInbox[0]?.content).toContain("id, name, email");
-    expect(frontendInbox[0]?.replyTo).toBe(question.id);
-  });
-});
-
-describe("full workflow: shared context via room", () => {
-  test("backend shares API schema, frontend reads it", async () => {
-    await registerPeer(peerStore, { peerId: frontendPeerId });
-    await registerPeer(peerStore, { peerId: backendPeerId });
-
-    await createRoom(roomStore, {
+    await openFeatureRoom(roomStore, {
       roomId: userFeatureRoomId,
       createdBy: backendPeerId,
-      description: "User feature coordination",
+      description: "User profile feature",
     });
-    await postContext(contextStore, {
+
+    await putFeatureContext(contextStore, roomStore, {
       roomId: userFeatureRoomId,
-      key: "user-endpoints",
+      key: "api-contract",
       content: "## GET /users/:id\nReturns { id, name, email }",
     });
-
-    const keys = await listContext(contextStore, { roomId: userFeatureRoomId });
-    expect(keys).toContain("user-endpoints");
-    const doc = await readContext(contextStore, {
+    await putFeatureContext(contextStore, roomStore, {
       roomId: userFeatureRoomId,
-      key: "user-endpoints",
+      key: "acceptance-criteria",
+      content: "- web + mobile show profile card",
     });
-    expect(doc).toContain("GET /users/:id");
 
-    await sendRoomMessage(roomStore, {
+    const keys = await listFeatureContextKeys(contextStore, {
+      roomId: userFeatureRoomId,
+    });
+    expect(keys.sort()).toEqual(["acceptance-criteria", "api-contract"]);
+
+    const apiDoc = await getFeatureContext(contextStore, {
+      roomId: userFeatureRoomId,
+      key: "api-contract",
+    });
+    expect(apiDoc).toContain("GET /users/:id");
+
+    await postFeatureMessage(roomStore, {
       roomId: userFeatureRoomId,
       from: backendPeerId,
-      content: "API ready",
+      type: "update",
+      content: "Endpoint merged",
     });
-    await sendRoomMessage(roomStore, {
+    await postFeatureMessage(roomStore, {
       roomId: userFeatureRoomId,
-      from: frontendPeerId,
-      content: "Building UI",
+      from: webPeerId,
+      type: "question",
+      content: "Do we support avatar urls?",
     });
-    const msgs = await readRoomMessages(roomStore, {
+    await postFeatureMessage(roomStore, {
+      roomId: userFeatureRoomId,
+      from: mobilePeerId,
+      type: "decision",
+      content: "Use fallback initials avatar on v1",
+    });
+
+    const messages = await readFeatureMessages(roomStore, {
       roomId: userFeatureRoomId,
     });
-    expect(msgs).toHaveLength(2);
+    expect(messages).toHaveLength(3);
+    expect(messages[0]?.type).toBe("update");
+    expect(messages[1]?.type).toBe("question");
+    expect(messages[2]?.type).toBe("decision");
+
+    await closeFeatureRoom(roomStore, { roomId: userFeatureRoomId });
+
+    expect(
+      postFeatureMessage(roomStore, {
+        roomId: userFeatureRoomId,
+        from: backendPeerId,
+        type: "update",
+        content: "late update",
+      }),
+    ).rejects.toThrow("Room feature-user-profile is closed");
+
+    expect(
+      putFeatureContext(contextStore, roomStore, {
+        roomId: userFeatureRoomId,
+        key: "post-close",
+        content: "not allowed",
+      }),
+    ).rejects.toThrow("Room feature-user-profile is closed");
+  });
+
+  test("does not create inbox files in room-only workflows", async () => {
+    await upsertPeer(peerStore, { peerId: webPeerId });
+    await openFeatureRoom(roomStore, {
+      roomId: userFeatureRoomId,
+      createdBy: webPeerId,
+    });
+    await postFeatureMessage(roomStore, {
+      roomId: userFeatureRoomId,
+      from: webPeerId,
+      type: "update",
+      content: "Kickoff",
+    });
+
+    const inboxDir = path.join(tmpDir, "inbox");
+    expect(fs.access(inboxDir)).rejects.toThrow();
   });
 });

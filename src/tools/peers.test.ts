@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FSPeerStore } from "../store/fs-peer-store";
-import { listPeers, registerPeer } from "./peers";
+import { listPeers, upsertPeer } from "./peers";
 
 let tmpDir: string;
 let store: FSPeerStore;
@@ -19,9 +19,9 @@ afterEach(async () => {
   await fs.rm(tmpDir, { recursive: true });
 });
 
-describe("registerPeer", () => {
+describe("upsertPeer", () => {
   test("creates peer file on first registration", async () => {
-    await registerPeer(store, {
+    await upsertPeer(store, {
       peerId: frontendPeerId,
       name: "Frontend App",
       project: "/repos/web",
@@ -40,7 +40,7 @@ describe("registerPeer", () => {
   });
 
   test("updates lastSeenAt on re-registration", async () => {
-    await registerPeer(store, { peerId: frontendPeerId, name: "V1" });
+    await upsertPeer(store, { peerId: frontendPeerId, name: "V1" });
     const first = JSON.parse(
       await fs.readFile(
         path.join(tmpDir, "peers", `${frontendPeerId}.json`),
@@ -49,7 +49,7 @@ describe("registerPeer", () => {
     );
 
     await new Promise((r) => setTimeout(r, 10));
-    await registerPeer(store, { peerId: frontendPeerId, name: "V2" });
+    await upsertPeer(store, { peerId: frontendPeerId, name: "V2" });
     const second = JSON.parse(
       await fs.readFile(
         path.join(tmpDir, "peers", `${frontendPeerId}.json`),
@@ -70,8 +70,8 @@ describe("listPeers", () => {
   });
 
   test("returns other peers, excluding self", async () => {
-    await registerPeer(store, { peerId: frontendPeerId });
-    await registerPeer(store, { peerId: backendPeerId });
+    await upsertPeer(store, { peerId: frontendPeerId });
+    await upsertPeer(store, { peerId: backendPeerId });
     const peers = await listPeers(store, frontendPeerId);
     expect(peers).toHaveLength(1);
     expect(String(peers[0]?.id)).toBe(backendPeerId);

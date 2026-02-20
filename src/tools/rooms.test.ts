@@ -4,10 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { FSRoomStore } from "../store/fs-room-store";
 import {
-  createRoom,
-  listRooms,
-  readRoomMessages,
-  sendRoomMessage,
+  closeFeatureRoom,
+  listFeatureRooms,
+  openFeatureRoom,
+  postFeatureMessage,
+  readFeatureMessages,
 } from "./rooms";
 
 let tmpDir: string;
@@ -26,9 +27,9 @@ afterEach(async () => {
   await fs.rm(tmpDir, { recursive: true });
 });
 
-describe("createRoom", () => {
+describe("openFeatureRoom", () => {
   test("creates room directory and meta", async () => {
-    await createRoom(roomStore, {
+    await openFeatureRoom(roomStore, {
       roomId: featureRoomId,
       createdBy: frontendPeerId,
       description: "Coordination",
@@ -41,68 +42,111 @@ describe("createRoom", () => {
     );
     expect(meta.id).toBe(featureRoomId);
     expect(meta.createdBy).toBe(frontendPeerId);
+    expect(meta.status).toBe("open");
   });
 });
 
-describe("listRooms", () => {
-  test("returns all rooms", async () => {
-    await createRoom(roomStore, {
+describe("listFeatureRooms", () => {
+  test("returns only open rooms by default", async () => {
+    await openFeatureRoom(roomStore, {
       roomId: "room-a",
       createdBy: frontendPeerId,
     });
-    await createRoom(roomStore, {
+    await openFeatureRoom(roomStore, {
       roomId: "room-b",
       createdBy: backendPeerId,
     });
-    const rooms = await listRooms(roomStore);
-    expect(rooms).toHaveLength(2);
+    await closeFeatureRoom(roomStore, {
+      roomId: "room-b",
+    });
+
+    const rooms = await listFeatureRooms(roomStore);
+    expect(rooms).toHaveLength(1);
+    expect(String(rooms[0]?.id)).toBe("room-a");
   });
 
-  test("returns empty when no rooms", async () => {
-    expect(await listRooms(roomStore)).toEqual([]);
+  test("returns closed rooms when include_closed is true", async () => {
+    await openFeatureRoom(roomStore, {
+      roomId: "room-a",
+      createdBy: frontendPeerId,
+    });
+    await openFeatureRoom(roomStore, {
+      roomId: "room-b",
+      createdBy: backendPeerId,
+    });
+    await closeFeatureRoom(roomStore, {
+      roomId: "room-b",
+    });
+
+    const rooms = await listFeatureRooms(roomStore, {
+      includeClosed: true,
+    });
+    expect(rooms).toHaveLength(2);
   });
 });
 
-describe("sendRoomMessage + readRoomMessages", () => {
-  test("appends and reads messages", async () => {
-    await createRoom(roomStore, {
+describe("postFeatureMessage + readFeatureMessages", () => {
+  test("appends and reads typed feature messages", async () => {
+    await openFeatureRoom(roomStore, {
       roomId: chatRoomId,
       createdBy: frontendPeerId,
     });
-    await sendRoomMessage(roomStore, {
+    await postFeatureMessage(roomStore, {
       roomId: chatRoomId,
       from: frontendPeerId,
-      content: "hello",
+      content: "API ready",
+      type: "update",
     });
-    await sendRoomMessage(roomStore, {
+    await postFeatureMessage(roomStore, {
       roomId: chatRoomId,
       from: backendPeerId,
-      content: "hi back",
+      content: "Need auth clarification",
+      type: "question",
     });
 
-    const msgs = await readRoomMessages(roomStore, { roomId: chatRoomId });
+    const msgs = await readFeatureMessages(roomStore, { roomId: chatRoomId });
     expect(msgs).toHaveLength(2);
-    expect(msgs[0]?.content).toBe("hello");
-    expect(msgs[1]?.content).toBe("hi back");
+    expect(msgs[0]?.type).toBe("update");
+    expect(msgs[1]?.type).toBe("question");
   });
 
   test("last_n limits results", async () => {
-    await createRoom(roomStore, {
+    await openFeatureRoom(roomStore, {
       roomId: chatRoomId,
       createdBy: frontendPeerId,
     });
     for (let i = 0; i < 5; i++) {
-      await sendRoomMessage(roomStore, {
+      await postFeatureMessage(roomStore, {
         roomId: chatRoomId,
         from: frontendPeerId,
         content: `msg ${i}`,
+        type: "update",
       });
     }
-    const msgs = await readRoomMessages(roomStore, {
+    const msgs = await readFeatureMessages(roomStore, {
       roomId: chatRoomId,
       lastN: 2,
     });
     expect(msgs).toHaveLength(2);
     expect(msgs[0]?.content).toBe("msg 3");
+  });
+
+  test("rejects writes to closed rooms", async () => {
+    await openFeatureRoom(roomStore, {
+      roomId: chatRoomId,
+      createdBy: frontendPeerId,
+    });
+    await closeFeatureRoom(roomStore, {
+      roomId: chatRoomId,
+    });
+
+    await expect(
+      postFeatureMessage(roomStore, {
+        roomId: chatRoomId,
+        from: frontendPeerId,
+        content: "late update",
+        type: "update",
+      }),
+    ).rejects.toThrow("Room chat is closed");
   });
 });

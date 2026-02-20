@@ -4,8 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { FSContextStore } from "../store/fs-context-store";
 import { FSRoomStore } from "../store/fs-room-store";
-import { listContext, postContext, readContext } from "./context";
-import { createRoom } from "./rooms";
+import {
+  getFeatureContext,
+  listFeatureContextKeys,
+  putFeatureContext,
+} from "./context";
+import { closeFeatureRoom, openFeatureRoom } from "./rooms";
 
 let tmpDir: string;
 let contextStore: FSContextStore;
@@ -16,21 +20,21 @@ beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ab-test-"));
   contextStore = new FSContextStore(tmpDir);
   roomStore = new FSRoomStore(tmpDir);
-  await createRoom(roomStore, { roomId, createdBy: "frontend" });
+  await openFeatureRoom(roomStore, { roomId, createdBy: "frontend" });
 });
 
 afterEach(async () => {
   await fs.rm(tmpDir, { recursive: true });
 });
 
-describe("postContext + readContext", () => {
+describe("putFeatureContext + getFeatureContext", () => {
   test("writes and reads context markdown", async () => {
-    await postContext(contextStore, {
+    await putFeatureContext(contextStore, roomStore, {
       roomId,
       key: "user-schema",
       content: "# User\n- id: string",
     });
-    const content = await readContext(contextStore, {
+    const content = await getFeatureContext(contextStore, {
       roomId,
       key: "user-schema",
     });
@@ -38,37 +42,51 @@ describe("postContext + readContext", () => {
   });
 
   test("overwrites existing context", async () => {
-    await postContext(contextStore, {
+    await putFeatureContext(contextStore, roomStore, {
       roomId,
       key: "api",
       content: "v1",
     });
-    await postContext(contextStore, {
+    await putFeatureContext(contextStore, roomStore, {
       roomId,
       key: "api",
       content: "v2",
     });
-    expect(await readContext(contextStore, { roomId, key: "api" })).toBe("v2");
+    expect(await getFeatureContext(contextStore, { roomId, key: "api" })).toBe(
+      "v2",
+    );
+  });
+
+  test("rejects writes to closed rooms", async () => {
+    await closeFeatureRoom(roomStore, { roomId });
+
+    await expect(
+      putFeatureContext(contextStore, roomStore, {
+        roomId,
+        key: "api",
+        content: "v2",
+      }),
+    ).rejects.toThrow("Room feature is closed");
   });
 });
 
-describe("listContext", () => {
+describe("listFeatureContextKeys", () => {
   test("lists all context keys", async () => {
-    await postContext(contextStore, {
+    await putFeatureContext(contextStore, roomStore, {
       roomId,
       key: "schema",
       content: "...",
     });
-    await postContext(contextStore, {
+    await putFeatureContext(contextStore, roomStore, {
       roomId,
       key: "auth",
       content: "...",
     });
-    const keys = await listContext(contextStore, { roomId });
+    const keys = await listFeatureContextKeys(contextStore, { roomId });
     expect(keys.sort()).toEqual(["auth", "schema"]);
   });
 
   test("returns empty when no context", async () => {
-    expect(await listContext(contextStore, { roomId })).toEqual([]);
+    expect(await listFeatureContextKeys(contextStore, { roomId })).toEqual([]);
   });
 });
