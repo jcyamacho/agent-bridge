@@ -9,7 +9,7 @@ interface RegisterOpts {
   description?: string;
 }
 
-export async function registerPeer(
+export async function upsertPeer(
   store: PeerStore,
   opts: RegisterOpts,
 ): Promise<Peer> {

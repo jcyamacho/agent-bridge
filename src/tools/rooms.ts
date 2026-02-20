@@ -4,6 +4,7 @@ import {
   PeerIdSchema,
   RoomIdSchema,
   type RoomMessage,
+  RoomMessageTypeSchema,
   type RoomMeta,
 } from "../schemas";
 import type { RoomStore } from "../store/contracts";
@@ -14,45 +15,69 @@ function generateRoomMessageId(): RoomMessage["id"] {
   );
 }
 
-interface CreateRoomOpts {
+interface OpenFeatureRoomOpts {
   roomId: string;
   createdBy: string;
   description?: string;
 }
 
-export async function createRoom(
+export async function openFeatureRoom(
   store: RoomStore,
-  opts: CreateRoomOpts,
+  opts: OpenFeatureRoomOpts,
 ): Promise<RoomMeta> {
   const meta: RoomMeta = {
     id: RoomIdSchema.parse(opts.roomId),
     description: opts.description,
     createdBy: PeerIdSchema.parse(opts.createdBy),
     createdAt: new Date().toISOString(),
+    status: "open",
   };
 
   await store.create(meta);
   return meta;
 }
 
-export async function listRooms(store: RoomStore): Promise<RoomMeta[]> {
-  return store.list();
+interface CloseFeatureRoomOpts {
+  roomId: string;
 }
 
-interface SendRoomMessageOpts {
+export async function closeFeatureRoom(
+  store: RoomStore,
+  opts: CloseFeatureRoomOpts,
+): Promise<RoomMeta> {
+  const closedAt = new Date().toISOString();
+  return store.close(RoomIdSchema.parse(opts.roomId), closedAt);
+}
+
+interface ListFeatureRoomsOpts {
+  includeClosed?: boolean;
+}
+
+export async function listFeatureRooms(
+  store: RoomStore,
+  opts?: ListFeatureRoomsOpts,
+): Promise<RoomMeta[]> {
+  return store.list({
+    includeClosed: opts?.includeClosed ?? false,
+  });
+}
+
+interface PostFeatureMessageOpts {
   roomId: string;
   from: string;
   content: string;
+  type: string;
 }
 
-export async function sendRoomMessage(
+export async function postFeatureMessage(
   store: RoomStore,
-  opts: SendRoomMessageOpts,
+  opts: PostFeatureMessageOpts,
 ): Promise<RoomMessage> {
   const msg: RoomMessage = {
     id: generateRoomMessageId(),
     from: PeerIdSchema.parse(opts.from),
     content: opts.content,
+    type: RoomMessageTypeSchema.parse(opts.type),
     createdAt: new Date().toISOString(),
   };
 
@@ -60,15 +85,15 @@ export async function sendRoomMessage(
   return msg;
 }
 
-interface ReadRoomMessagesOpts {
+interface ReadFeatureMessagesOpts {
   roomId: string;
   since?: string;
   lastN?: number;
 }
 
-export async function readRoomMessages(
+export async function readFeatureMessages(
   store: RoomStore,
-  opts: ReadRoomMessagesOpts,
+  opts: ReadFeatureMessagesOpts,
 ): Promise<RoomMessage[]> {
   let messages = await store.readMessages(RoomIdSchema.parse(opts.roomId));
 

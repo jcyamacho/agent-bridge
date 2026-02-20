@@ -2,58 +2,42 @@ import process from "node:process";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { version } from "../package.json";
 import { parseArgs } from "./config";
 import { FSContextStore } from "./store/fs-context-store";
-import { FSMessageStore } from "./store/fs-message-store";
 import { FSPeerStore } from "./store/fs-peer-store";
 import { FSRoomStore } from "./store/fs-room-store";
-import { listContext, postContext, readContext } from "./tools/context";
-import { checkInbox, reply, sendMessage } from "./tools/messaging";
-import { listPeers, registerPeer } from "./tools/peers";
 import {
-  createRoom,
-  listRooms,
-  readRoomMessages,
-  sendRoomMessage,
+  getFeatureContext,
+  listFeatureContextKeys,
+  putFeatureContext,
+} from "./tools/context";
+import { listPeers, upsertPeer } from "./tools/peers";
+import {
+  closeFeatureRoom,
+  listFeatureRooms,
+  openFeatureRoom,
+  postFeatureMessage,
+  readFeatureMessages,
 } from "./tools/rooms";
 
 const config = parseArgs(process.argv.slice(2));
 const peerStore = new FSPeerStore(config.bridgeDir);
-const messageStore = new FSMessageStore(config.bridgeDir);
 const roomStore = new FSRoomStore(config.bridgeDir);
 const contextStore = new FSContextStore(config.bridgeDir);
 
 const server = new McpServer({
   name: "agent-bridge",
-  version: "0.1.0",
+  version,
 });
 
 async function heartbeat() {
-  await registerPeer(peerStore, {
+  await upsertPeer(peerStore, {
     peerId: config.peerId,
     name: config.name,
     project: config.project,
   });
 }
-
-server.registerTool(
-  "register",
-  {
-    description: "Update this peer's registration info (name, description)",
-    inputSchema: z.object({
-      name: z.string().optional(),
-      description: z.string().optional(),
-    }),
-  },
-  async ({ name, description }) => {
-    const peer = await registerPeer(peerStore, {
-      peerId: config.peerId,
-      name: name ?? config.name,
-      description,
-    });
-    return { content: [{ type: "text", text: JSON.stringify(peer) }] };
-  },
-);
 
 server.registerTool(
   "list_peers",
@@ -69,74 +53,9 @@ server.registerTool(
 );
 
 server.registerTool(
-  "send_message",
+  "open_feature_room",
   {
-    description: 'Send a direct message to a peer (use to="all" for broadcast)',
-    inputSchema: z.object({
-      to: z.string(),
-      content: z.string(),
-      type: z
-        .enum(["question", "reply", "announcement", "context_share"])
-        .optional(),
-    }),
-  },
-  async ({ to, content, type }) => {
-    await heartbeat();
-    const msg = await sendMessage(messageStore, peerStore, {
-      from: config.peerId,
-      to,
-      content,
-      type: type ?? "question",
-    });
-    return { content: [{ type: "text", text: JSON.stringify(msg) }] };
-  },
-);
-
-server.registerTool(
-  "check_inbox",
-  {
-    description: "Check inbox for new messages",
-    inputSchema: z.object({
-      include_read: z.boolean().optional(),
-    }),
-  },
-  async ({ include_read }) => {
-    await heartbeat();
-    let messages = await checkInbox(messageStore, config.peerId);
-    if (!include_read) {
-      messages = messages.filter(
-        (m) => m.status === "unread" || m.status === "read",
-      );
-    }
-    return { content: [{ type: "text", text: JSON.stringify(messages) }] };
-  },
-);
-
-server.registerTool(
-  "reply",
-  {
-    description: "Reply to a message in your inbox",
-    inputSchema: z.object({
-      message_id: z.string(),
-      content: z.string(),
-    }),
-  },
-  async ({ message_id, content }) => {
-    await heartbeat();
-    const msg = await reply(messageStore, {
-      from: config.peerId,
-      messageId: message_id,
-      content,
-    });
-    return { content: [{ type: "text", text: JSON.stringify(msg) }] };
-  },
-);
-
-server.registerTool(
-  "create_room",
-  {
-    description:
-      "Create a shared room for group discussion and context sharing",
+    description: "Create a feature room for collaboration",
     inputSchema: z.object({
       room_id: z.string(),
       description: z.string().optional(),
@@ -144,7 +63,7 @@ server.registerTool(
   },
   async ({ room_id, description }) => {
     await heartbeat();
-    const room = await createRoom(roomStore, {
+    const room = await openFeatureRoom(roomStore, {
       roomId: room_id,
       createdBy: config.peerId,
       description,
@@ -154,42 +73,65 @@ server.registerTool(
 );
 
 server.registerTool(
-  "list_rooms",
+  "close_feature_room",
   {
-    description: "List all available rooms",
-    inputSchema: z.object({}),
+    description: "Close a feature room to make it read-only",
+    inputSchema: z.object({
+      room_id: z.string(),
+    }),
   },
-  async () => {
+  async ({ room_id }) => {
     await heartbeat();
-    const rooms = await listRooms(roomStore);
+    const room = await closeFeatureRoom(roomStore, {
+      roomId: room_id,
+    });
+    return { content: [{ type: "text", text: JSON.stringify(room) }] };
+  },
+);
+
+server.registerTool(
+  "list_feature_rooms",
+  {
+    description: "List feature rooms (open by default)",
+    inputSchema: z.object({
+      include_closed: z.boolean().optional(),
+    }),
+  },
+  async ({ include_closed }) => {
+    await heartbeat();
+    const rooms = await listFeatureRooms(roomStore, {
+      includeClosed: include_closed ?? false,
+    });
     return { content: [{ type: "text", text: JSON.stringify(rooms) }] };
   },
 );
 
 server.registerTool(
-  "send_room_message",
+  "post_feature_message",
   {
-    description: "Send a message to a room",
+    description: "Post a typed message to a feature room",
     inputSchema: z.object({
       room_id: z.string(),
       content: z.string(),
+      type: z.enum(["update", "question", "decision", "blocker"]),
     }),
   },
-  async ({ room_id, content }) => {
+  async ({ room_id, content, type }) => {
     await heartbeat();
-    const msg = await sendRoomMessage(roomStore, {
+    const message = await postFeatureMessage(roomStore, {
       roomId: room_id,
       from: config.peerId,
       content,
+      type,
     });
-    return { content: [{ type: "text", text: JSON.stringify(msg) }] };
+    return { content: [{ type: "text", text: JSON.stringify(message) }] };
   },
 );
 
 server.registerTool(
-  "read_room_messages",
+  "read_feature_messages",
   {
-    description: "Read messages from a room",
+    description: "Read messages from a feature room",
     inputSchema: z.object({
       room_id: z.string(),
       since: z.string().optional(),
@@ -198,7 +140,7 @@ server.registerTool(
   },
   async ({ room_id, since, last_n }) => {
     await heartbeat();
-    const messages = await readRoomMessages(roomStore, {
+    const messages = await readFeatureMessages(roomStore, {
       roomId: room_id,
       since,
       lastN: last_n,
@@ -208,9 +150,9 @@ server.registerTool(
 );
 
 server.registerTool(
-  "post_context",
+  "put_feature_context",
   {
-    description: "Post a context document to a room's shared board",
+    description: "Write a context document into a feature room",
     inputSchema: z.object({
       room_id: z.string(),
       key: z.string(),
@@ -219,7 +161,11 @@ server.registerTool(
   },
   async ({ room_id, key, content }) => {
     await heartbeat();
-    await postContext(contextStore, { roomId: room_id, key, content });
+    await putFeatureContext(contextStore, roomStore, {
+      roomId: room_id,
+      key,
+      content,
+    });
     return {
       content: [
         {
@@ -232,9 +178,9 @@ server.registerTool(
 );
 
 server.registerTool(
-  "read_context",
+  "get_feature_context",
   {
-    description: "Read a context document from a room's shared board",
+    description: "Read a context document from a feature room",
     inputSchema: z.object({
       room_id: z.string(),
       key: z.string(),
@@ -242,22 +188,27 @@ server.registerTool(
   },
   async ({ room_id, key }) => {
     await heartbeat();
-    const content = await readContext(contextStore, { roomId: room_id, key });
+    const content = await getFeatureContext(contextStore, {
+      roomId: room_id,
+      key,
+    });
     return { content: [{ type: "text", text: content }] };
   },
 );
 
 server.registerTool(
-  "list_context",
+  "list_feature_context_keys",
   {
-    description: "List all context keys in a room",
+    description: "List context keys in a feature room",
     inputSchema: z.object({
       room_id: z.string(),
     }),
   },
   async ({ room_id }) => {
     await heartbeat();
-    const keys = await listContext(contextStore, { roomId: room_id });
+    const keys = await listFeatureContextKeys(contextStore, {
+      roomId: room_id,
+    });
     return { content: [{ type: "text", text: JSON.stringify(keys) }] };
   },
 );

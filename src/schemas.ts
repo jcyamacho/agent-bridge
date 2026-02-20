@@ -22,31 +22,26 @@ export const PeerSchema = z.object({
 });
 export type Peer = z.infer<typeof PeerSchema>;
 
-export const messageTypes = [
+export const roomMessageTypes = [
+  "update",
   "question",
-  "reply",
-  "announcement",
-  "context_share",
+  "decision",
+  "blocker",
 ] as const;
-export const messageStatuses = ["unread", "read", "archived"] as const;
+export const RoomMessageTypeSchema = z.enum(roomMessageTypes);
+export type RoomMessageType = z.infer<typeof RoomMessageTypeSchema>;
 
-export const MessageSchema = z.object({
-  id: MessageIdSchema,
-  from: PeerIdSchema,
-  to: z.union([PeerIdSchema, z.literal("all")]),
-  type: z.enum(messageTypes),
-  content: z.string(),
-  replyTo: MessageIdSchema.optional(),
-  createdAt: z.iso.datetime(),
-  status: z.enum(messageStatuses),
-});
-export type Message = z.infer<typeof MessageSchema>;
+export const roomStatuses = ["open", "closed"] as const;
+export const RoomStatusSchema = z.enum(roomStatuses);
+export type RoomStatus = z.infer<typeof RoomStatusSchema>;
 
 export const RoomMetaSchema = z.object({
   id: RoomIdSchema,
   description: z.string().optional(),
   createdBy: PeerIdSchema,
   createdAt: z.iso.datetime(),
+  status: RoomStatusSchema,
+  closedAt: z.iso.datetime().optional(),
 });
 export type RoomMeta = z.infer<typeof RoomMetaSchema>;
 
@@ -54,6 +49,7 @@ export const RoomMessageSchema = z.object({
   id: MessageIdSchema,
   from: PeerIdSchema,
   content: z.string(),
+  type: RoomMessageTypeSchema,
   createdAt: z.iso.datetime(),
 });
 export type RoomMessage = z.infer<typeof RoomMessageSchema>;

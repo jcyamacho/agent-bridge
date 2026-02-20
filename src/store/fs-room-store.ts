@@ -8,7 +8,7 @@ import {
   type RoomMeta,
   RoomMetaSchema,
 } from "../schemas";
-import type { RoomStore } from "./contracts";
+import type { ListRoomsOptions, RoomStore } from "./contracts";
 import { FSLayout } from "./fs-layout";
 
 export class FSRoomStore implements RoomStore {
@@ -24,13 +24,26 @@ export class FSRoomStore implements RoomStore {
     await fs.writeFile(this.layout.roomMessagesFile(meta.id), "");
   }
 
+  async close(roomId: RoomId, closedAt: string): Promise<RoomMeta> {
+    const existing = await this.get(roomId);
+    if (!existing) throw new Error(`Room ${roomId} not found`);
+
+    const closed: RoomMeta = {
+      ...existing,
+      status: "closed",
+      closedAt,
+    };
+    await atomicWriteJson(this.layout.roomMetaFile(roomId), closed);
+    return closed;
+  }
+
   async get(roomId: RoomId): Promise<RoomMeta | undefined> {
     const raw = await readJson<unknown>(this.layout.roomMetaFile(roomId));
     const parsed = RoomMetaSchema.safeParse(raw);
     return parsed.success ? parsed.data : undefined;
   }
 
-  async list(): Promise<RoomMeta[]> {
+  async list(options?: ListRoomsOptions): Promise<RoomMeta[]> {
     let dirs: string[];
     try {
       dirs = await fs.readdir(this.layout.roomsDir);
@@ -46,10 +59,20 @@ export class FSRoomStore implements RoomStore {
       if (room) rooms.push(room);
     }
 
-    return rooms;
+    if (options?.includeClosed) return rooms;
+    return rooms.filter((room) => room.status === "open");
+  }
+
+  private async getOpenRoomOrThrow(roomId: RoomId): Promise<void> {
+    const room = await this.get(roomId);
+    if (!room) throw new Error(`Room ${roomId} not found`);
+    if (room.status === "closed") {
+      throw new Error(`Room ${roomId} is closed`);
+    }
   }
 
   async appendMessage(roomId: RoomId, message: RoomMessage): Promise<void> {
+    await this.getOpenRoomOrThrow(roomId);
     const line = `${JSON.stringify(message)}\n`;
     await fs.appendFile(this.layout.roomMessagesFile(roomId), line);
   }

@@ -1,7 +1,5 @@
 import type {
   ContextKey,
-  Message,
-  MessageId,
   Peer,
   PeerId,
   RoomId,
@@ -25,22 +23,15 @@ export interface PeerStore {
   listIds(): Promise<PeerId[]>;
 }
 
-export interface MessageStore {
-  putInbox(peerId: PeerId, message: Message): Promise<void>;
-  getInbox(peerId: PeerId, messageId: MessageId): Promise<Message | undefined>;
-  listInbox(peerId: PeerId): Promise<Message[]>;
-  updateInbox(
-    peerId: PeerId,
-    messageId: MessageId,
-    patch: Partial<Message>,
-  ): Promise<Message | undefined>;
-  archiveInbox(peerId: PeerId, messageId: MessageId): Promise<void>;
+export interface ListRoomsOptions {
+  includeClosed?: boolean;
 }
 
 export interface RoomStore {
   create(meta: RoomMeta): Promise<void>;
+  close(roomId: RoomId, closedAt: string): Promise<RoomMeta>;
   get(roomId: RoomId): Promise<RoomMeta | undefined>;
-  list(): Promise<RoomMeta[]>;
+  list(options?: ListRoomsOptions): Promise<RoomMeta[]>;
   appendMessage(roomId: RoomId, message: RoomMessage): Promise<void>;
   readMessages(roomId: RoomId): Promise<RoomMessage[]>;
 }
